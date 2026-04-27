@@ -39,3 +39,24 @@ jobs:
         with:
           name: mosaic-windows-amd64
           path: bin/*.exe
+
+  ui:
+    name: ui (renderer)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mosaic-ui-dist
+          path: ui/dist

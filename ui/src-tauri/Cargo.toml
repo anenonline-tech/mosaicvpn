@@ -1,0 +1,22 @@
+[package]
+name = "mosaic-ui"
+version = "0.1.0"
+description = "Mosaic VPN GUI — Tauri shell for the Atlas renderer."
+authors = ["Mosaic"]
+edition = "2021"
+rust-version = "1.77"
+
+# Tauri 2 ships its own build script generator; we keep build.rs trivial.
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "5"
+
+[features]
+# Default features mirror what Tauri 2 expects.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
