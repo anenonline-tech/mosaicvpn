@@ -221,6 +221,120 @@ func keys(m map[string]bool) []string {
 	return out
 }
 
+// TestBuild_KillSwitch verifies the sing-box-layer kill-switch:
+// (1) user rules with Action=direct become reject actions,
+// (2) the AllowLAN bypass-to-direct rule is suppressed,
+// (3) direct-dns is dropped from dns.servers, and
+// (4) rule_set download_detour switches from direct to proxy.
+func TestBuild_KillSwitch(t *testing.T) {
+	rules := []proto.Rule{
+		{ID: "leak", Enabled: true, Action: proto.ActionDirect, Match: proto.Match{Domain: []string{"intranet"}}},
+		{ID: "geo", Enabled: true, Action: proto.ActionProxy, Match: proto.Match{GeoSite: []string{"youtube"}}},
+	}
+	for _, killSwitch := range []bool{false, true} {
+		t.Run(map[bool]string{false: "off", true: "on"}[killSwitch], func(t *testing.T) {
+			prefs := store.DefaultPrefs()
+			prefs.AllowLAN = true
+			prefs.KillSwitch = killSwitch
+			cfg, err := sboxconfig.Build(
+				proto.Server{
+					Name: "S", Protocol: proto.ProtoVLESS,
+					Address: "1.2.3.4", Port: 443,
+					Raw: map[string]any{"uuid": "00000000-0000-0000-0000-000000000001"},
+				},
+				prefs, rules,
+			)
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+
+			// Round-trip through sing-box so a typo in the rule shape
+			// would fail the test rather than ship to users.
+			raw, err := cfg.JSON()
+			if err != nil {
+				t.Fatalf("JSON: %v", err)
+			}
+			ctx := include.Context(context.Background())
+			var opts option.Options
+			if err := opts.UnmarshalJSONContext(ctx, raw); err != nil {
+				t.Fatalf("sing-box rejected kill-switch=%v config: %v\n--- config ---\n%s", killSwitch, err, raw)
+			}
+
+			routeRules, _ := cfg.Route["rules"].([]map[string]any)
+
+			// (1) leak rule transformation
+			var leakRule map[string]any
+			for _, r := range routeRules {
+				ds, _ := r["domain"].([]string)
+				for _, d := range ds {
+					if d == "intranet" {
+						leakRule = r
+					}
+				}
+			}
+			if leakRule == nil {
+				t.Fatalf("leak rule not emitted")
+			}
+			if killSwitch {
+				if leakRule["outbound"] == "direct" {
+					t.Fatalf("kill-switch on but direct rule survived: %v", leakRule)
+				}
+				if leakRule["action"] != "reject" {
+					t.Fatalf("kill-switch on: expected action=reject, got %v", leakRule)
+				}
+			} else {
+				if leakRule["outbound"] != "direct" {
+					t.Fatalf("kill-switch off: expected outbound=direct, got %v", leakRule)
+				}
+			}
+
+			// (2) AllowLAN bypass rule
+			var sawLAN bool
+			for _, r := range routeRules {
+				if v, ok := r["ip_is_private"].(bool); ok && v && r["outbound"] == "direct" {
+					sawLAN = true
+				}
+			}
+			if killSwitch && sawLAN {
+				t.Fatalf("kill-switch on but ip_is_private->direct rule was emitted")
+			}
+			if !killSwitch && !sawLAN {
+				t.Fatalf("kill-switch off but AllowLAN rule missing")
+			}
+
+			// (3) DNS servers
+			servers, _ := cfg.DNS["servers"].([]map[string]any)
+			gotDirectDNS := false
+			for _, s := range servers {
+				if s["tag"] == "direct-dns" {
+					gotDirectDNS = true
+				}
+			}
+			if killSwitch && gotDirectDNS {
+				t.Fatalf("kill-switch on but direct-dns server is still configured")
+			}
+			if !killSwitch && !gotDirectDNS {
+				t.Fatalf("kill-switch off but direct-dns is missing")
+			}
+
+			// (4) rule_set detour
+			sets, _ := cfg.Route["rule_set"].([]map[string]any)
+			if len(sets) == 0 {
+				t.Fatalf("rule_set not registered")
+			}
+			wantDetour := "direct"
+			if killSwitch {
+				wantDetour = "proxy"
+			}
+			for _, s := range sets {
+				if s["download_detour"] != wantDetour {
+					t.Fatalf("rule_set %v download_detour: got %v, want %v", s["tag"], s["download_detour"], wantDetour)
+				}
+			}
+		})
+	}
+}
+
 func TestBuild_DisabledRulesNotEmitted(t *testing.T) {
 	cfg, err := sboxconfig.Build(
 		proto.Server{
