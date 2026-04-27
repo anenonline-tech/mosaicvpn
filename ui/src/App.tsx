@@ -4,6 +4,7 @@ import { useStatus } from "./hooks/useStatus";
 import { Main } from "./screens/Main";
 import { Placeholder } from "./screens/Placeholder";
 import { Pool } from "./screens/Pool";
+import { Routing } from "./screens/Routing";
 
 type Screen = "main" | "routing" | "pool" | "folio" | "tray";
 
@@ -62,12 +63,7 @@ export function App(): JSX.Element {
 
       {screen === "main" ? <Main status={status} /> : null}
       {screen === "pool" ? <Pool activeServerId={status.server?.id} /> : null}
-      {screen === "routing" ? (
-        <Placeholder
-          title="Routing register"
-          subtitle="Phase 3C · domain & geo rules · priorities"
-        />
-      ) : null}
+      {screen === "routing" ? <Routing /> : null}
       {screen === "folio" ? (
         <Placeholder
           title="Folio of preferences"

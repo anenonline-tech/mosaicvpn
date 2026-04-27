@@ -78,6 +78,8 @@ export const api = {
   listRules: () => request<Rule[]>("GET", "/v1/rules"),
   addRule: (rule: Partial<Rule>) => request<Rule>("POST", "/v1/rules", rule),
   deleteRule: (id: string) => request<void>("DELETE", `/v1/rules/${id}`),
+  reorderRules: (ids: string[]) =>
+    request<void>("POST", "/v1/rules:reorder", { ids }),
 
   getPrefs: () => request<Prefs>("GET", "/v1/prefs"),
   setPrefs: (prefs: Prefs) => request<Prefs>("PUT", "/v1/prefs", prefs),
