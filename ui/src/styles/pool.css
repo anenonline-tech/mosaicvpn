@@ -1,0 +1,420 @@
+/* Pool gazetteer — mirrors docs/mockups/subs.html */
+
+.pool-frame {
+  position: absolute;
+  top: 50px;
+  left: 40px;
+  right: 40px;
+  bottom: 50px;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  row-gap: 14px;
+  z-index: 1;
+}
+
+.pool-mast {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 24px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ink);
+}
+.pool-name {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.pool-name i {
+  color: var(--copper);
+  font-style: italic;
+}
+.pool-mast-sub {
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 600;
+  margin-top: 6px;
+}
+.pool-mast-right {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.pool-mast-right .copper {
+  color: var(--copper);
+  font-style: italic;
+}
+
+.pool-error {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--copper);
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(184, 92, 44, 0.3);
+}
+
+/* gazetteer grid -- 2 columns scrolling */
+
+.gazetteer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 28px;
+  row-gap: 0;
+  align-content: start;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.pool {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  column-gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.pool .num {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 22px;
+  text-align: center;
+  line-height: 1.2;
+}
+.pool.cur .num {
+  color: var(--copper);
+}
+.pool.empty {
+  opacity: 0.7;
+}
+
+.pool-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.pool-card-name {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+.pool.cur .pool-card-name em {
+  font-style: italic;
+  color: var(--copper);
+}
+.pool-card-name.italic-mute {
+  font-style: italic;
+  color: var(--ink-mute);
+}
+
+.pool-src {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  color: var(--ink-mute);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pool-src b {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.pool-badge {
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 600;
+  border: 1px solid var(--rule-strong);
+  padding: 2px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pool-badge.ok {
+  color: var(--leaf);
+  border-color: var(--leaf);
+}
+.pool-badge.warn {
+  color: #b8881e;
+  border-color: #b8881e;
+}
+.pool-badge.err {
+  color: var(--copper);
+  border-color: var(--copper);
+}
+
+.pool-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+.pool-cell {
+  padding: 10px 12px 8px 0;
+  border-right: 1px solid var(--rule);
+}
+.pool-cell:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+.pool-cell .lab {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 600;
+}
+.pool-cell .v {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-size: 22px;
+  line-height: 1;
+  margin-top: 4px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.pool-cell .v small {
+  font-size: 11px;
+  color: var(--ink-mute);
+  margin-left: 3px;
+  font-family: "Inter", sans-serif;
+  font-weight: 500;
+}
+.pool-cell .v em {
+  font-style: italic;
+  color: var(--copper);
+}
+
+.pool-protos {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 600;
+}
+.pool-bar {
+  display: flex;
+  height: 4px;
+  flex: 1;
+  background: var(--rule);
+}
+.pool-bar .seg {
+  display: block;
+  height: 100%;
+}
+.pool-bar .hy {
+  background: #a26ec0;
+}
+.pool-bar .vl {
+  background: #4f86c2;
+}
+.pool-bar .nv {
+  background: var(--leaf);
+}
+.pool-bar .ss {
+  background: #c89a3a;
+}
+.pool-bar .wg {
+  background: var(--copper);
+}
+.pool-bar .tj {
+  background: #6f5fa3;
+}
+.pool-bar .ot {
+  background: var(--ink-mute);
+}
+.pool-mix {
+  color: var(--ink-2);
+  font-family: "Inter", sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.pool-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pool-actions .pool-foot {
+  margin-left: auto;
+  font-family: "Atlas Serif", Georgia, serif;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 12px;
+}
+
+.pool-verse {
+  margin-top: 14px;
+  font-family: "Atlas Serif", Georgia, serif;
+  font-style: italic;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.pool-verse em {
+  color: var(--copper);
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* expanded station list */
+
+.pool-stations {
+  margin-top: 12px;
+  border-top: 1px solid var(--rule);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.station {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  column-gap: 12px;
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 11.5px;
+  border-bottom: 1px dotted var(--rule);
+}
+.station:last-child {
+  border-bottom: 0;
+}
+.station .city {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-size: 13px;
+}
+.station.cur {
+  background: rgba(184, 92, 44, 0.05);
+}
+.station.cur .city {
+  color: var(--copper);
+  font-style: italic;
+}
+.station .addr,
+.station .proto,
+.station .ms {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: var(--ink-mute);
+}
+.station .ms {
+  color: var(--ink-2);
+  text-align: right;
+  min-width: 50px;
+}
+
+/* "+ add" footer row */
+
+.add-row {
+  border-top: 1px solid var(--ink);
+  padding-top: 14px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+}
+.add-lab {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-size: 18px;
+  font-style: italic;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+.add-lab i {
+  color: var(--copper);
+  font-style: italic;
+}
+.add-input {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--ink);
+  padding: 6px 0;
+}
+.add-pre {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  color: var(--ink-mute);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.add-input input[type="text"] {
+  background: transparent;
+  border: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+  width: 100%;
+}
+.add-formats {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-style: italic;
+  font-size: 11.5px;
+  color: var(--ink-mute);
+}
+
+/* shared button styles -- consumed by Pool actions */
+
+.btn {
+  font-family: "Inter", sans-serif;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.btn.ghost {
+  border-color: var(--rule-strong);
+  color: var(--ink-2);
+}
+.btn.ghost:hover {
+  background: var(--ink-2);
+  color: var(--paper);
+}
+.btn.ghost.danger:hover {
+  background: var(--copper);
+  border-color: var(--copper);
+}
+.btn.primary {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.btn.primary:hover {
+  background: var(--copper);
+  border-color: var(--copper);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.italic {
+  font-style: italic;
+}

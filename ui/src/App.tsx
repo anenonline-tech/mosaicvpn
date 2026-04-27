@@ -3,6 +3,7 @@ import { Marginalia } from "./components/Marginalia";
 import { useStatus } from "./hooks/useStatus";
 import { Main } from "./screens/Main";
 import { Placeholder } from "./screens/Placeholder";
+import { Pool } from "./screens/Pool";
 
 type Screen = "main" | "routing" | "pool" | "folio" | "tray";
 
@@ -60,12 +61,7 @@ export function App(): JSX.Element {
       </nav>
 
       {screen === "main" ? <Main status={status} /> : null}
-      {screen === "pool" ? (
-        <Placeholder
-          title="Pool gazetteer"
-          subtitle="Phase 3B · servers · subscriptions · health"
-        />
-      ) : null}
+      {screen === "pool" ? <Pool activeServerId={status.server?.id} /> : null}
       {screen === "routing" ? (
         <Placeholder
           title="Routing register"
