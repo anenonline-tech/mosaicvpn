@@ -123,6 +123,48 @@ func TestSubscribeReceivesEvents(t *testing.T) {
 	}
 }
 
+// TestStatsTickerBroadcasts asserts that, while connected, subscribers get
+// periodic Status events with updated byte counters even without explicit
+// state transitions.
+func TestStatsTickerBroadcasts(t *testing.T) {
+	prev := state.StatsInterval
+	state.StatsInterval = 50 * time.Millisecond
+	t.Cleanup(func() { state.StatsInterval = prev })
+
+	_, _, mgr, srv := newSetup(t)
+	ch, cancel := mgr.Subscribe()
+	defer cancel()
+
+	if err := mgr.Connect(context.Background(), srv.ID); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer mgr.Disconnect(context.Background())
+
+	deadline := time.After(3 * time.Second)
+	var firstBytes uint64
+	var sawDelta bool
+	for !sawDelta {
+		select {
+		case ev, ok := <-ch:
+			if !ok {
+				t.Fatal("subscription channel closed")
+			}
+			if ev.State != proto.StateConnected {
+				continue
+			}
+			if firstBytes == 0 {
+				firstBytes = ev.BytesIn
+				continue
+			}
+			if ev.BytesIn > firstBytes {
+				sawDelta = true
+			}
+		case <-deadline:
+			t.Fatalf("did not see byte counter advance via stats ticker; first=%d", firstBytes)
+		}
+	}
+}
+
 func TestPersistsLastServer(t *testing.T) {
 	s, _, mgr, srv := newSetup(t)
 	if err := mgr.Connect(context.Background(), srv.ID); err != nil {

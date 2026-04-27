@@ -2,9 +2,10 @@
 //
 // The backend is intentionally thin: build a JSON config via sboxconfig,
 // parse it through sing-box's option machinery, and drive the resulting
-// *box.Box through Start/Close. Statistics are sampled from the route
-// connection manager when available; before sing-box exposes them we
-// just report zeros so the rest of the daemon (UI, CLI) still works.
+// *box.Box through Start/Close. Byte counters are populated by attaching
+// a ConnectionTracker to the router before Start() so every routed
+// connection is wrapped with read/write counters that feed atomic totals
+// surfaced through Stats().
 package sbox
 
 import (
@@ -77,6 +78,13 @@ func (b *Backend) Start(ctx context.Context, server proto.Server, prefs store.Pr
 		cancel()
 		return fmt.Errorf("instantiate sing-box: %w", err)
 	}
+
+	b.rxIn.Store(0)
+	b.rxOut.Store(0)
+	if router := instance.Router(); router != nil {
+		router.AppendTracker(newByteTracker(&b.rxIn, &b.rxOut))
+	}
+
 	if err := instance.Start(); err != nil {
 		_ = instance.Close()
 		cancel()
@@ -85,8 +93,6 @@ func (b *Backend) Start(ctx context.Context, server proto.Server, prefs store.Pr
 
 	b.box = instance
 	b.cancel = cancel
-	b.rxIn.Store(0)
-	b.rxOut.Store(0)
 	return nil
 }
 
@@ -122,9 +128,9 @@ func (b *Backend) Stop(ctx context.Context) error {
 	}
 }
 
-// Stats implements state.Backend. Phase 2 wires up the clash/v2ray API for
-// real counters; until then we expose zeros plus a conservative latency
-// derived from the last server test (if any).
+// Stats implements state.Backend. The byte counters are fed by a
+// ConnectionTracker attached to the router; latency is reported as zero
+// here and computed elsewhere (see internal/latency for per-server probes).
 func (b *Backend) Stats() (uint64, uint64, int) {
 	return b.rxIn.Load(), b.rxOut.Load(), 0
 }
