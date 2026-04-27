@@ -35,6 +35,10 @@ type Backend interface {
 	Stats() (bytesIn, bytesOut uint64, latencyMS int)
 }
 
+// StatsInterval is how often the manager re-broadcasts a Status snapshot
+// while connected so subscribers see live byte counters without polling.
+var StatsInterval = time.Second
+
 // Manager owns the connection state and is safe for concurrent use.
 type Manager struct {
 	mu       sync.Mutex
@@ -42,6 +46,7 @@ type Manager struct {
 	store    *store.Store
 	backend  Backend
 	cancel   context.CancelFunc
+	tickStop chan struct{}
 	subs     []chan proto.Status
 	version  string
 	pid      int
@@ -164,6 +169,7 @@ func (m *Manager) Connect(ctx context.Context, serverID string) error {
 		DaemonVersion: m.st.DaemonVersion,
 		DaemonPID:     m.st.DaemonPID,
 	})
+	m.startStatsTickerLocked()
 	m.mu.Unlock()
 
 	if err := m.store.SetLastServer(serverID); err != nil {
@@ -179,6 +185,7 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		m.mu.Unlock()
 		return nil
 	}
+	m.stopStatsTickerLocked()
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
@@ -224,12 +231,56 @@ func (m *Manager) Version() string { return m.version }
 
 func (m *Manager) transitionLocked(next proto.Status) {
 	m.st = next
+	m.broadcastLocked(next)
+}
+
+func (m *Manager) broadcastLocked(st proto.Status) {
 	for _, ch := range m.subs {
 		select {
-		case ch <- next:
+		case ch <- st:
 		default:
 			// drop if subscriber is slow; subscribers should be fast.
 		}
+	}
+}
+
+// startStatsTickerLocked spins up a goroutine that, while connected,
+// re-broadcasts the Status (with live byte counters) every StatsInterval.
+// Caller must hold m.mu.
+func (m *Manager) startStatsTickerLocked() {
+	if m.tickStop != nil {
+		return
+	}
+	stop := make(chan struct{})
+	m.tickStop = stop
+	interval := StatsInterval
+	if interval <= 0 {
+		interval = time.Second
+	}
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				st := m.Status()
+				if st.State != proto.StateConnected {
+					continue
+				}
+				m.mu.Lock()
+				m.broadcastLocked(st)
+				m.mu.Unlock()
+			}
+		}
+	}()
+}
+
+func (m *Manager) stopStatsTickerLocked() {
+	if m.tickStop != nil {
+		close(m.tickStop)
+		m.tickStop = nil
 	}
 }
 
