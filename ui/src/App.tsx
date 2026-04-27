@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Marginalia } from "./components/Marginalia";
 import { useStatus } from "./hooks/useStatus";
 import { Main } from "./screens/Main";
-import { Placeholder } from "./screens/Placeholder";
 import { Pool } from "./screens/Pool";
 import { Routing } from "./screens/Routing";
 import { Folio } from "./screens/Folio";
+import { Tray } from "./screens/Tray";
 
 type Screen = "main" | "routing" | "pool" | "folio" | "tray";
 
@@ -66,12 +66,7 @@ export function App(): JSX.Element {
       {screen === "pool" ? <Pool activeServerId={status.server?.id} /> : null}
       {screen === "routing" ? <Routing /> : null}
       {screen === "folio" ? <Folio /> : null}
-      {screen === "tray" ? (
-        <Placeholder
-          title="Tray composer"
-          subtitle="Phase 3E · system tray icon & menu"
-        />
-      ) : null}
+      {screen === "tray" ? <Tray status={status} /> : null}
     </div>
   );
 }
