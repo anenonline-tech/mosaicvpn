@@ -96,9 +96,15 @@ func TestSubscribeReceivesEvents(t *testing.T) {
 	ch, cancel := mgr.Subscribe()
 	defer cancel()
 
+	connectDone := make(chan struct{})
 	go func() {
+		defer close(connectDone)
 		_ = mgr.Connect(context.Background(), srv.ID)
 	}()
+	t.Cleanup(func() {
+		<-connectDone
+		_ = mgr.Disconnect(context.Background())
+	})
 
 	want := map[proto.State]bool{
 		proto.StateConnecting: false,
