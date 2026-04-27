@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 	"github.com/pupspochta-cpu/mosaicvpn/internal/api"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/killswitch"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/logx"
+	"github.com/pupspochta-cpu/mosaicvpn/internal/mcp"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/paths"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/proto"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/sbox"
@@ -120,6 +122,12 @@ func run(dataDirOverride string, useMock bool) error {
 		"backend", backend.Name(),
 	)
 
+	mcpSrv := mcp.New(store, mgr, mcp.Fetcher(api.HTTPFetcher(http.DefaultClient)))
+	if err := mcpSrv.Start(ctx); err != nil {
+		// MCP is optional surface; log and continue rather than fail the daemon.
+		logx.Warn("mcp start failed", "err", err)
+	}
+
 	// Wait for SIGINT/SIGTERM.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -129,6 +137,7 @@ func run(dataDirOverride string, useMock bool) error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	_ = mgr.Disconnect(shutdownCtx)
+	_ = mcpSrv.Stop(shutdownCtx)
 	_ = shutdown(shutdownCtx)
 	return nil
 }
