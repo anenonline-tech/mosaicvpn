@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pupspochta-cpu/mosaicvpn/internal/api"
+	"github.com/pupspochta-cpu/mosaicvpn/internal/killswitch"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/logx"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/paths"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/proto"
@@ -73,6 +74,12 @@ func run(dataDirOverride string, useMock bool) error {
 		backend = sbox.New()
 	}
 	mgr := state.New(store, backend, Version)
+	ks := killswitch.New()
+	// Sweep stale rules from a previous run before we begin servicing API
+	// calls; if mosaicd crashed mid-connection, the OS firewall may still
+	// have leftover Mosaic-KillSwitch-* rules.
+	_ = ks.Disengage(context.Background())
+	mgr.SetKillSwitch(ks)
 
 	apiSrv := api.NewServer(store, mgr, nil)
 

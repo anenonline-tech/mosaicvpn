@@ -4,13 +4,33 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/pupspochta-cpu/mosaicvpn/internal/killswitch"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/proto"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/state"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/store"
 )
+
+// fakeKillSwitch counts Engage / Disengage calls and records the last params.
+type fakeKillSwitch struct {
+	engageCalls    atomic.Int32
+	disengageCalls atomic.Int32
+	lastParams     killswitch.Params
+}
+
+func (f *fakeKillSwitch) Name() string { return "fake" }
+func (f *fakeKillSwitch) Engage(_ context.Context, p killswitch.Params) error {
+	f.lastParams = p
+	f.engageCalls.Add(1)
+	return nil
+}
+func (f *fakeKillSwitch) Disengage(context.Context) error {
+	f.disengageCalls.Add(1)
+	return nil
+}
 
 func newSetup(t *testing.T) (*store.Store, *state.MockBackend, *state.Manager, proto.Server) {
 	t.Helper()
@@ -168,6 +188,70 @@ func TestStatsTickerBroadcasts(t *testing.T) {
 		case <-deadline:
 			t.Fatalf("did not see byte counter advance via stats ticker; first=%d", firstBytes)
 		}
+	}
+}
+
+// TestKillSwitchEngagesAroundConnect verifies the platform-level kill-switch
+// driver is engaged before backend.Start (so a backend failure can't leak)
+// and disengaged on Disconnect.
+func TestKillSwitchEngagesAroundConnect(t *testing.T) {
+	s, _, mgr, srv := newSetup(t)
+
+	// Force-enable kill-switch in the persisted prefs.
+	if err := s.Update(func(st *store.State) error {
+		st.Prefs.KillSwitch = true
+		st.Prefs.AllowLAN = false
+		return nil
+	}); err != nil {
+		t.Fatalf("update prefs: %v", err)
+	}
+
+	fk := &fakeKillSwitch{}
+	mgr.SetKillSwitch(fk)
+
+	if err := mgr.Connect(context.Background(), srv.ID); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if got := fk.engageCalls.Load(); got != 1 {
+		t.Fatalf("engage calls: got %d, want 1", got)
+	}
+	if got := fk.lastParams.ServerHosts; len(got) != 1 || got[0] != srv.Address {
+		t.Fatalf("engage params: got %+v, want hosts [%s]", fk.lastParams, srv.Address)
+	}
+	if fk.lastParams.AllowLAN {
+		t.Fatalf("engage params: AllowLAN=true but prefs disabled it")
+	}
+
+	if err := mgr.Disconnect(context.Background()); err != nil {
+		t.Fatalf("disconnect: %v", err)
+	}
+	if got := fk.disengageCalls.Load(); got < 1 {
+		t.Fatalf("disengage calls: got %d, want >=1", got)
+	}
+}
+
+// TestKillSwitchSkipsWhenDisabled asserts the driver is left alone when
+// prefs.KillSwitch is false — Engage must not be called for users who
+// haven't opted in.
+func TestKillSwitchSkipsWhenDisabled(t *testing.T) {
+	s, _, mgr, srv := newSetup(t)
+	if err := s.Update(func(st *store.State) error {
+		st.Prefs.KillSwitch = false
+		return nil
+	}); err != nil {
+		t.Fatalf("update prefs: %v", err)
+	}
+
+	fk := &fakeKillSwitch{}
+	mgr.SetKillSwitch(fk)
+
+	if err := mgr.Connect(context.Background(), srv.ID); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { _ = mgr.Disconnect(context.Background()) })
+
+	if got := fk.engageCalls.Load(); got != 0 {
+		t.Fatalf("engage was called %d times despite prefs.KillSwitch=false", got)
 	}
 }
 

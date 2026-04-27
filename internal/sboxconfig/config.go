@@ -47,7 +47,7 @@ func Build(server proto.Server, prefs store.Prefs, rules []proto.Rule) (*Config,
 		Outbounds: append(buildBaseOutbounds(), out),
 		Route:     buildRoute(prefs, rules, server),
 	}
-	if sets := buildRuleSets(rules); len(sets) > 0 {
+	if sets := buildRuleSets(rules, prefs.KillSwitch); len(sets) > 0 {
 		cfg.Route["rule_set"] = sets
 	}
 	return cfg, nil
@@ -229,11 +229,17 @@ func buildNaive(s proto.Server) (map[string]any, error) {
 func buildDNS(prefs store.Prefs) map[string]any {
 	proxied := firstNonEmpty(prefs.DNSProxied, "https://1.1.1.1/dns-query")
 	direct := firstNonEmpty(prefs.DNSDirect, "udp://77.88.8.8")
+	servers := []map[string]any{
+		{"tag": "proxy-dns", "address": proxied, "detour": "proxy"},
+	}
+	// In kill-switch mode every DNS query must go through the proxy as
+	// well; the direct-dns server would be a leak path for clients that
+	// route DNS via detour=direct, so we drop it.
+	if !prefs.KillSwitch {
+		servers = append(servers, map[string]any{"tag": "direct-dns", "address": direct, "detour": "direct"})
+	}
 	out := map[string]any{
-		"servers": []map[string]any{
-			{"tag": "proxy-dns", "address": proxied, "detour": "proxy"},
-			{"tag": "direct-dns", "address": direct, "detour": "direct"},
-		},
+		"servers":  servers,
 		"final":    "proxy-dns",
 		"strategy": "ipv4_only",
 	}
@@ -323,14 +329,16 @@ func buildRoute(prefs store.Prefs, rules []proto.Rule, server proto.Server) map[
 	// Resolve DNS via the rule-action engine (the legacy `dns` outbound was
 	// removed in sing-box 1.13).
 	rs = append(rs, map[string]any{"protocol": "dns", "action": "hijack-dns"})
-	if prefs.AllowLAN {
+	// AllowLAN sends private-range traffic via direct, which is a leak path
+	// for kill-switch users; suppress it when the kill-switch is engaged.
+	if prefs.AllowLAN && !prefs.KillSwitch {
 		rs = append(rs, map[string]any{"ip_is_private": true, "outbound": "direct"})
 	}
 	for _, rule := range rules {
 		if !rule.Enabled {
 			continue
 		}
-		rs = append(rs, translateRule(rule))
+		rs = append(rs, translateRule(rule, prefs.KillSwitch))
 	}
 	if len(rs) > 0 {
 		r["rules"] = rs
@@ -338,7 +346,7 @@ func buildRoute(prefs store.Prefs, rules []proto.Rule, server proto.Server) map[
 	return r
 }
 
-func translateRule(r proto.Rule) map[string]any {
+func translateRule(r proto.Rule, killSwitch bool) map[string]any {
 	out := map[string]any{}
 	if len(r.Match.Domain) > 0 {
 		out["domain"] = r.Match.Domain
@@ -368,7 +376,13 @@ func translateRule(r proto.Rule) map[string]any {
 	}
 	switch r.Action {
 	case proto.ActionDirect:
-		out["outbound"] = "direct"
+		// Kill-switch rewrites direct rules to reject so the user can't
+		// accidentally punch a hole in the tunnel via routing.
+		if killSwitch {
+			out["action"] = "reject"
+		} else {
+			out["outbound"] = "direct"
+		}
 	case proto.ActionBlock:
 		// sing-box 1.13 removed the `block` outbound; use the reject rule action.
 		out["action"] = "reject"
@@ -459,9 +473,15 @@ func prefixAll(prefix string, in []string) []string {
 // for each unique geosite/geoip code referenced. The entries use the
 // remote type so sing-box auto-fetches them on first use; the response
 // is cached in the data dir.
-func buildRuleSets(rules []proto.Rule) []map[string]any {
+func buildRuleSets(rules []proto.Rule, killSwitch bool) []map[string]any {
 	seen := map[string]struct{}{}
 	var sets []map[string]any
+	// rule_set updates fire on update_interval — long after Connect — so
+	// in kill-switch mode they must come through the proxy too.
+	detour := "direct"
+	if killSwitch {
+		detour = "proxy"
+	}
 	add := func(tag, kind, code string) {
 		if _, ok := seen[tag]; ok {
 			return
@@ -472,7 +492,7 @@ func buildRuleSets(rules []proto.Rule) []map[string]any {
 			"type":            "remote",
 			"format":          "binary",
 			"url":             ruleSetURL(kind, code),
-			"download_detour": "direct",
+			"download_detour": detour,
 			"update_interval": "168h",
 		})
 	}

@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pupspochta-cpu/mosaicvpn/internal/killswitch"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/logx"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/proto"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/store"
@@ -41,26 +42,28 @@ var StatsInterval = time.Second
 
 // Manager owns the connection state and is safe for concurrent use.
 type Manager struct {
-	mu       sync.Mutex
-	st       proto.Status
-	store    *store.Store
-	backend  Backend
-	cancel   context.CancelFunc
-	tickStop chan struct{}
-	subs     []chan proto.Status
-	version  string
-	pid      int
-	started  time.Time
+	mu         sync.Mutex
+	st         proto.Status
+	store      *store.Store
+	backend    Backend
+	killSwitch killswitch.System
+	cancel     context.CancelFunc
+	tickStop   chan struct{}
+	subs       []chan proto.Status
+	version    string
+	pid        int
+	started    time.Time
 }
 
 // New constructs a Manager around an existing store and backend.
 func New(s *store.Store, backend Backend, version string) *Manager {
 	m := &Manager{
-		store:   s,
-		backend: backend,
-		version: version,
-		pid:     osPID(),
-		started: time.Now().UTC(),
+		store:      s,
+		backend:    backend,
+		killSwitch: killswitch.Noop{},
+		version:    version,
+		pid:        osPID(),
+		started:    time.Now().UTC(),
 	}
 	prefs := s.Snapshot().Prefs
 	m.st = proto.Status{
@@ -143,7 +146,24 @@ func (m *Manager) Connect(ctx context.Context, serverID string) error {
 	m.mu.Unlock()
 
 	snap := m.store.Snapshot()
+	if snap.Prefs.KillSwitch {
+		// Engage the platform-level kill-switch BEFORE the backend starts
+		// so a backend that fails halfway can't leak DNS / handshake
+		// traffic via the OS default route.
+		params := killswitch.Params{
+			DaemonPID:   m.pid,
+			ServerHosts: []string{server.Address},
+			ServerPorts: []int{server.Port},
+			AllowLAN:    snap.Prefs.AllowLAN,
+		}
+		if err := m.killSwitch.Engage(cctx, params); err != nil {
+			logx.Warn("kill-switch engage failed; continuing without firewall layer", "err", err)
+		}
+	}
 	if err := m.backend.Start(cctx, server, snap.Prefs, snap.Rules); err != nil {
+		if snap.Prefs.KillSwitch {
+			_ = m.killSwitch.Disengage(context.Background())
+		}
 		m.mu.Lock()
 		m.transitionLocked(proto.Status{
 			State:         proto.StateError,
@@ -196,6 +216,10 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		return err
 	}
 
+	if err := m.killSwitch.Disengage(ctx); err != nil {
+		logx.Warn("kill-switch disengage failed", "err", err)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.transitionLocked(proto.Status{
@@ -218,6 +242,18 @@ func (m *Manager) SetTunnelPrefs(mode string, killSwitch bool) {
 	st.TunnelMode = mode
 	st.KillSwitch = killSwitch
 	m.transitionLocked(st)
+}
+
+// SetKillSwitch wires a platform-level kill-switch driver. It must be
+// called before the first Connect; the daemon constructor invokes it
+// during startup with killswitch.New(). Tests can substitute a fake.
+func (m *Manager) SetKillSwitch(ks killswitch.System) {
+	if ks == nil {
+		ks = killswitch.Noop{}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.killSwitch = ks
 }
 
 // Started returns when the daemon began running.
