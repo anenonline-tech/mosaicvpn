@@ -123,6 +123,85 @@ func TestSubscribeReceivesEvents(t *testing.T) {
 	}
 }
 
+func TestStatsHeartbeat(t *testing.T) {
+	_, _, mgr, srv := newSetup(t)
+	mgr.SetHeartbeat(20 * time.Millisecond)
+
+	ch, cancel := mgr.Subscribe()
+	defer cancel()
+
+	if err := mgr.Connect(context.Background(), srv.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Drain the connecting/connected state-transition events first.
+	deadline := time.After(2 * time.Second)
+	connected := false
+	for !connected {
+		select {
+		case ev := <-ch:
+			if ev.State == proto.StateConnected {
+				connected = true
+			}
+		case <-deadline:
+			t.Fatal("never saw connected event")
+		}
+	}
+
+	// Wait for at least one heartbeat with non-zero bytes (mock backend
+	// ramps every 200 ms, heartbeat fires every 20 ms — so within ~250 ms
+	// we should observe non-zero counters delivered without polling).
+	var first, last uint64
+	deadline = time.After(3 * time.Second)
+	for first == 0 {
+		select {
+		case ev := <-ch:
+			if ev.State == proto.StateConnected && ev.BytesIn > 0 {
+				first = ev.BytesIn
+				last = first
+			}
+		case <-deadline:
+			t.Fatal("never saw a heartbeat with non-zero bytes")
+		}
+	}
+	// Then assert subsequent heartbeats keep growing.
+	deadline = time.After(2 * time.Second)
+	for last <= first {
+		select {
+		case ev := <-ch:
+			if ev.State == proto.StateConnected && ev.BytesIn > last {
+				last = ev.BytesIn
+			}
+		case <-deadline:
+			t.Fatalf("bytes_in did not grow across heartbeats: stuck at %d", first)
+		}
+	}
+
+	if err := mgr.Disconnect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	// After disconnect the heartbeat must stop. Drain any in-flight events
+	// then assert the channel goes quiet.
+	drainDeadline := time.After(200 * time.Millisecond)
+drain:
+	for {
+		select {
+		case <-ch:
+		case <-drainDeadline:
+			break drain
+		}
+	}
+	select {
+	case ev, ok := <-ch:
+		if ok && ev.State == proto.StateConnected {
+			t.Fatalf("heartbeat fired after disconnect: %+v", ev)
+		}
+	case <-time.After(100 * time.Millisecond):
+		// good — no more heartbeats
+	}
+}
+
 func TestPersistsLastServer(t *testing.T) {
 	s, _, mgr, srv := newSetup(t)
 	if err := mgr.Connect(context.Background(), srv.ID); err != nil {
