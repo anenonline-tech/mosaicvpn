@@ -26,6 +26,10 @@ type Config struct {
 	Experimental map[string]any   `json:"experimental,omitempty"`
 }
 
+// RuleSetBaseURL is the upstream that hosts MetaCubeX-converted .srs files
+// for sing-box. It's overridable for users who self-host or air-gap.
+var RuleSetBaseURL = "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo"
+
 // Build composes a complete sing-box config for the given server and prefs.
 // Rules are translated into the route.rules array.
 func Build(server proto.Server, prefs store.Prefs, rules []proto.Rule) (*Config, error) {
@@ -42,6 +46,9 @@ func Build(server proto.Server, prefs store.Prefs, rules []proto.Rule) (*Config,
 		Inbounds:  buildInbounds(prefs),
 		Outbounds: append(buildBaseOutbounds(), out),
 		Route:     buildRoute(prefs, rules, server),
+	}
+	if sets := buildRuleSets(rules); len(sets) > 0 {
+		cfg.Route["rule_set"] = sets
 	}
 	return cfg, nil
 }
@@ -250,6 +257,13 @@ func buildInbounds(prefs store.Prefs) []map[string]any {
 }
 
 func tunInbound(prefs store.Prefs) map[string]any {
+	stack := strings.ToLower(prefs.TunStack)
+	switch stack {
+	case "system", "gvisor", "mixed":
+		// allowed
+	default:
+		stack = "gvisor"
+	}
 	in := map[string]any{
 		"type":           "tun",
 		"tag":            "tun-in",
@@ -257,8 +271,11 @@ func tunInbound(prefs store.Prefs) map[string]any {
 		"address":        []string{"172.18.0.1/30"},
 		"mtu":            firstNonZero(prefs.MTU, 1420),
 		"auto_route":     true,
-		"strict_route":   true,
-		"stack":          "system",
+		// strict_route is incompatible with the gvisor stack on some
+		// platforms (it's a kernel-level option). Only set it for the
+		// system stack where it actually buys leak-proofness.
+		"strict_route":   stack == "system",
+		"stack":          stack,
 	}
 	if prefs.BlockIPv6 {
 		in["address"] = []string{"172.18.0.1/30"}
@@ -436,4 +453,45 @@ func prefixAll(prefix string, in []string) []string {
 		out[i] = prefix + strings.ToLower(v)
 	}
 	return out
+}
+
+// buildRuleSets walks every enabled rule and emits a route.rule_set entry
+// for each unique geosite/geoip code referenced. The entries use the
+// remote type so sing-box auto-fetches them on first use; the response
+// is cached in the data dir.
+func buildRuleSets(rules []proto.Rule) []map[string]any {
+	seen := map[string]struct{}{}
+	var sets []map[string]any
+	add := func(tag, kind, code string) {
+		if _, ok := seen[tag]; ok {
+			return
+		}
+		seen[tag] = struct{}{}
+		sets = append(sets, map[string]any{
+			"tag":             tag,
+			"type":            "remote",
+			"format":          "binary",
+			"url":             ruleSetURL(kind, code),
+			"download_detour": "direct",
+			"update_interval": "168h",
+		})
+	}
+	for _, r := range rules {
+		if !r.Enabled {
+			continue
+		}
+		for _, code := range r.Match.GeoSite {
+			code = strings.ToLower(code)
+			add("geosite-"+code, "geosite", code)
+		}
+		for _, code := range r.Match.GeoIP {
+			code = strings.ToLower(code)
+			add("geoip-"+code, "geoip", code)
+		}
+	}
+	return sets
+}
+
+func ruleSetURL(kind, code string) string {
+	return fmt.Sprintf("%s/%s/%s.srs", RuleSetBaseURL, kind, code)
 }

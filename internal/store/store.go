@@ -35,6 +35,7 @@ type State struct {
 // Prefs holds user-configurable behaviour of the daemon.
 type Prefs struct {
 	TunnelMode      string `json:"tunnel_mode"` // "tun" | "proxy"
+	TunStack        string `json:"tun_stack"`   // "system" | "gvisor" | "mixed"
 	SocksAddr       string `json:"socks_addr"`
 	HTTPAddr        string `json:"http_addr"`
 	MTU             int    `json:"mtu"`
@@ -61,6 +62,11 @@ type Prefs struct {
 func DefaultPrefs() Prefs {
 	return Prefs{
 		TunnelMode:    "tun",
+		// gvisor is the safer default: it works on every platform without
+		// the strict-route system-stack requirements that bite users
+		// running another VPN/firewall in parallel. Power users can opt
+		// into "system" for native performance.
+		TunStack:      "gvisor",
 		SocksAddr:     "127.0.0.1:1080",
 		HTTPAddr:      "127.0.0.1:1081",
 		MTU:           1420,

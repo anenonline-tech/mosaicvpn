@@ -393,6 +393,7 @@ func newPrefsCmd(opts *cliOpts) *cobra.Command {
 			var (
 				killSwitch string
 				tunnelMode string
+				tunStack   string
 				autoStart  string
 				blockIPv6  string
 				shareLAN   string
@@ -415,6 +416,9 @@ func newPrefsCmd(opts *cliOpts) *cobra.Command {
 					if tunnelMode != "" {
 						p.TunnelMode = tunnelMode
 					}
+					if tunStack != "" {
+						p.TunStack = tunStack
+					}
 					if autoStart != "" {
 						p.AutoStart = autoStart
 					}
@@ -435,6 +439,7 @@ func newPrefsCmd(opts *cliOpts) *cobra.Command {
 			}
 			c.Flags().StringVar(&killSwitch, "kill-switch", "", "true/false")
 			c.Flags().StringVar(&tunnelMode, "tunnel", "", "tun|proxy")
+			c.Flags().StringVar(&tunStack, "tun-stack", "", "system|gvisor|mixed")
 			c.Flags().StringVar(&autoStart, "auto-start", "", "service|user|manual")
 			c.Flags().StringVar(&blockIPv6, "block-ipv6", "", "true/false")
 			c.Flags().StringVar(&shareLAN, "share-lan", "", "true/false")
@@ -545,6 +550,7 @@ func printStatus(w io.Writer, st proto.Status) {
 
 func printPrefs(w io.Writer, p store.Prefs) {
 	fmt.Fprintf(w, "tunnel:        %s\n", p.TunnelMode)
+	fmt.Fprintf(w, "tun-stack:     %s\n", p.TunStack)
 	fmt.Fprintf(w, "socks:         %s\n", p.SocksAddr)
 	fmt.Fprintf(w, "http:          %s\n", p.HTTPAddr)
 	fmt.Fprintf(w, "mtu:           %d\n", p.MTU)

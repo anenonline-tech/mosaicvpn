@@ -119,6 +119,108 @@ func TestBuild_AllProtocols(t *testing.T) {
 	}
 }
 
+func TestBuild_TunStack(t *testing.T) {
+	cases := []struct {
+		stack string
+		want  string
+	}{
+		{"system", "system"},
+		{"gvisor", "gvisor"},
+		{"mixed", "mixed"},
+		{"", "gvisor"},     // empty falls back to safe default
+		{"garbage", "gvisor"}, // unknown values fall back as well
+	}
+	for _, tc := range cases {
+		t.Run(tc.stack, func(t *testing.T) {
+			prefs := store.DefaultPrefs()
+			prefs.TunnelMode = "tun"
+			prefs.TunStack = tc.stack
+			cfg, err := sboxconfig.Build(
+				proto.Server{
+					Name: "S", Protocol: proto.ProtoVLESS,
+					Address: "1.2.3.4", Port: 443,
+					Raw: map[string]any{"uuid": "00000000-0000-0000-0000-000000000001"},
+				},
+				prefs, nil,
+			)
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			if len(cfg.Inbounds) == 0 {
+				t.Fatalf("no inbounds emitted")
+			}
+			tun := cfg.Inbounds[0]
+			if tun["type"] != "tun" {
+				t.Fatalf("expected tun inbound, got %v", tun)
+			}
+			if got := tun["stack"]; got != tc.want {
+				t.Fatalf("stack: got %v, want %v", got, tc.want)
+			}
+			// strict_route must only be set when the system stack is in use:
+			// otherwise it's a no-op or actively rejected on some platforms.
+			gotStrict, _ := tun["strict_route"].(bool)
+			if wantStrict := tc.want == "system"; gotStrict != wantStrict {
+				t.Fatalf("strict_route: got %v, want %v", gotStrict, wantStrict)
+			}
+		})
+	}
+}
+
+// TestBuild_RuleSetsRegistered verifies that every geosite/geoip code
+// referenced by a rule shows up in route.rule_set so sing-box can resolve
+// the rule_set tag at runtime. Without this, a config that references
+// "geosite-youtube" would parse but fail at engine init time.
+func TestBuild_RuleSetsRegistered(t *testing.T) {
+	rules := []proto.Rule{
+		{
+			ID: "yt", Enabled: true, Action: proto.ActionProxy,
+			Match: proto.Match{GeoSite: []string{"youtube"}, GeoIP: []string{"us"}},
+		},
+		{
+			ID: "cn", Enabled: true, Action: proto.ActionDirect,
+			Match: proto.Match{GeoSite: []string{"cn"}, GeoIP: []string{"cn"}},
+		},
+		{
+			ID: "off", Enabled: false, Action: proto.ActionBlock,
+			Match: proto.Match{GeoSite: []string{"ads"}}, // must NOT be registered
+		},
+	}
+	cfg, err := sboxconfig.Build(
+		proto.Server{
+			Name: "S", Protocol: proto.ProtoVLESS,
+			Address: "1.2.3.4", Port: 443,
+			Raw: map[string]any{"uuid": "00000000-0000-0000-0000-000000000001"},
+		},
+		store.DefaultPrefs(),
+		rules,
+	)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	sets, _ := cfg.Route["rule_set"].([]map[string]any)
+	gotTags := map[string]bool{}
+	for _, s := range sets {
+		gotTags[s["tag"].(string)] = true
+	}
+	want := []string{"geosite-youtube", "geosite-cn", "geoip-us", "geoip-cn"}
+	for _, tag := range want {
+		if !gotTags[tag] {
+			t.Fatalf("rule_set %q missing; got tags %v", tag, keys(gotTags))
+		}
+	}
+	if gotTags["geosite-ads"] {
+		t.Fatalf("disabled rule's geosite was still registered")
+	}
+}
+
+func keys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 func TestBuild_DisabledRulesNotEmitted(t *testing.T) {
 	cfg, err := sboxconfig.Build(
 		proto.Server{
