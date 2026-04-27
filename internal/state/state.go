@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pupspochta-cpu/mosaicvpn/internal/latency"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/logx"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/proto"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/store"
@@ -200,6 +201,57 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		DaemonPID:     m.st.DaemonPID,
 	})
 	return nil
+}
+
+// TestServers probes the supplied servers (or every stored server when ids
+// is empty) and persists the latency results back into the store. Probing
+// is bounded by `concurrency` parallel handshakes.
+func (m *Manager) TestServers(ctx context.Context, ids []string, concurrency int) ([]TestResult, error) {
+	snap := m.store.Snapshot()
+	servers := snap.Servers
+	if len(ids) > 0 {
+		want := map[string]struct{}{}
+		for _, id := range ids {
+			want[id] = struct{}{}
+		}
+		filtered := make([]proto.Server, 0, len(ids))
+		for _, sv := range servers {
+			if _, ok := want[sv.ID]; ok {
+				filtered = append(filtered, sv)
+			}
+		}
+		servers = filtered
+	}
+
+	results := latency.ProbeAll(ctx, servers, latency.Options{Concurrency: concurrency})
+	out := make([]TestResult, len(results))
+	for i, r := range results {
+		errMsg := ""
+		ms := r.MS
+		if r.Err != nil {
+			errMsg = r.Err.Error()
+			ms = -1
+		}
+		if err := m.store.UpdateServerTest(r.ServerID, ms, r.At, errMsg); err != nil {
+			logx.Warn("update server test", "id", r.ServerID, "err", err)
+		}
+		out[i] = TestResult{
+			ServerID: r.ServerID,
+			MS:       r.MS,
+			Err:      errMsg,
+			At:       r.At,
+		}
+	}
+	return out, nil
+}
+
+// TestResult is the manager-facing result of a latency probe. It mirrors
+// latency.Result but with Err as a string for transport over the API.
+type TestResult struct {
+	ServerID string    `json:"server_id"`
+	MS       int       `json:"ms"`
+	Err      string    `json:"error,omitempty"`
+	At       time.Time `json:"at"`
 }
 
 // SetTunnelPrefs informs the manager of the current tunnel-mode/kill-switch

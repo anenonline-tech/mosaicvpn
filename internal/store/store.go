@@ -264,6 +264,23 @@ func (s *Store) FindServer(id string) (proto.Server, bool) {
 	return proto.Server{}, false
 }
 
+// UpdateServerTest records the outcome of a latency probe against a
+// stored server. errMsg is "" on success.
+func (s *Store) UpdateServerTest(id string, ms int, at time.Time, errMsg string) error {
+	return s.Update(func(st *State) error {
+		for i := range st.Servers {
+			if st.Servers[i].ID != id {
+				continue
+			}
+			st.Servers[i].LastTestMS = ms
+			st.Servers[i].LastTestAt = at
+			st.Servers[i].LastTestError = errMsg
+			return nil
+		}
+		return fmt.Errorf("server %q not found", id)
+	})
+}
+
 // SetLastServer remembers which server was most recently chosen.
 func (s *Store) SetLastServer(id string) error {
 	return s.Update(func(st *State) error {

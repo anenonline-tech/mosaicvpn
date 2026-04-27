@@ -45,6 +45,7 @@ type Server struct {
 	SubscriptionID string         `json:"subscription_id"`
 	LastTestMS     int            `json:"last_test_ms,omitempty"`
 	LastTestAt     time.Time      `json:"last_test_at,omitempty"`
+	LastTestError  string         `json:"last_test_error,omitempty"`
 	Raw            map[string]any `json:"raw,omitempty"`
 }
 

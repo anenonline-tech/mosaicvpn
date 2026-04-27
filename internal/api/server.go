@@ -99,6 +99,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("DELETE /v1/subscriptions/{id}", s.handleDeleteSub)
 
 	s.mux.HandleFunc("GET /v1/servers", s.handleListServers)
+	s.mux.HandleFunc("POST /v1/servers:test", s.handleTestServers)
 
 	s.mux.HandleFunc("GET /v1/rules", s.handleListRules)
 	s.mux.HandleFunc("POST /v1/rules", s.handleAddRule)
@@ -233,6 +234,26 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleTestServers(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs         []string `json:"ids,omitempty"`
+		Concurrency int      `json:"concurrency,omitempty"`
+	}
+	// Body is optional — empty body means "test every stored server".
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid body")
+			return
+		}
+	}
+	results, err := s.mgr.TestServers(r.Context(), req.IDs, req.Concurrency)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, results)
 }
 
 func (s *Server) handleListRules(w http.ResponseWriter, _ *http.Request) {

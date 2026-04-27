@@ -157,6 +157,27 @@ func (c *Client) Servers(ctx context.Context, subscriptionID string) ([]proto.Se
 	return out, err
 }
 
+// TestResult is one row of a `mosaic test` / POST /v1/servers:test response.
+type TestResult struct {
+	ServerID string    `json:"server_id"`
+	MS       int       `json:"ms"`
+	Err      string    `json:"error,omitempty"`
+	At       time.Time `json:"at"`
+}
+
+// TestServers triggers parallel TCP-handshake probes against the given
+// server ids (or all stored servers when ids is empty) and returns the
+// per-server outcomes.
+func (c *Client) TestServers(ctx context.Context, ids []string, concurrency int) ([]TestResult, error) {
+	body := struct {
+		IDs         []string `json:"ids,omitempty"`
+		Concurrency int      `json:"concurrency,omitempty"`
+	}{IDs: ids, Concurrency: concurrency}
+	var out []TestResult
+	err := c.do(ctx, http.MethodPost, "/v1/servers:test", body, &out)
+	return out, err
+}
+
 // Rules returns the routing rules in priority order.
 func (c *Client) Rules(ctx context.Context) ([]proto.Rule, error) {
 	var out []proto.Rule

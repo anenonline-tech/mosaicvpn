@@ -58,6 +58,7 @@ func newRoot() *cobra.Command {
 		newDisconnectCmd(opts),
 		newSubCmd(opts),
 		newServersCmd(opts),
+		newTestCmd(opts),
 		newRuleCmd(opts),
 		newPrefsCmd(opts),
 		newDiagCmd(opts),
@@ -304,6 +305,64 @@ func newServersCmd(opts *cliOpts) *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&subID, "subscription", "", "filter by subscription id")
+	return c
+}
+
+// ---------- test (latency probe) -----------------------------------------
+
+func newTestCmd(opts *cliOpts) *cobra.Command {
+	var (
+		concurrency int
+		nameFilter  string
+	)
+	c := &cobra.Command{
+		Use:   "test [server-id ...]",
+		Short: "Probe servers (TCP handshake) and record their latency.",
+		Long: "Run a parallel TCP-handshake latency test against one or more " +
+			"stored servers. With no arguments and no --name filter every " +
+			"stored server is tested. Results are persisted into the store " +
+			"so the GUI/CLI can sort by ping.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cl, err := newClient(opts)
+			if err != nil {
+				return err
+			}
+			ids := args
+			if nameFilter != "" {
+				servers, err := cl.Servers(cmd.Context(), "")
+				if err != nil {
+					return err
+				}
+				for _, s := range servers {
+					if strings.Contains(strings.ToLower(s.Name), strings.ToLower(nameFilter)) {
+						ids = append(ids, s.ID)
+					}
+				}
+				if len(ids) == 0 {
+					return fmt.Errorf("no servers matched name filter %q", nameFilter)
+				}
+			}
+			results, err := cl.TestServers(cmd.Context(), ids, concurrency)
+			if err != nil {
+				return err
+			}
+			return emit(opts, cmd.OutOrStdout(), results, func(w io.Writer) {
+				if len(results) == 0 {
+					fmt.Fprintln(w, "(no servers tested)")
+					return
+				}
+				for _, r := range results {
+					if r.Err != "" {
+						fmt.Fprintf(w, "%-16s  ----  %s\n", truncate(r.ServerID, 16), r.Err)
+						continue
+					}
+					fmt.Fprintf(w, "%-16s  %4d ms\n", truncate(r.ServerID, 16), r.MS)
+				}
+			})
+		},
+	}
+	c.Flags().IntVar(&concurrency, "concurrency", 16, "max parallel handshakes")
+	c.Flags().StringVar(&nameFilter, "name", "", "test only servers whose name contains this substring")
 	return c
 }
 
