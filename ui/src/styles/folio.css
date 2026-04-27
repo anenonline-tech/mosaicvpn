@@ -1,0 +1,232 @@
+/* Folio — preferences. Mirrors docs/mockups/settings.html */
+
+.folio-frame {
+  position: absolute;
+  top: 50px;
+  left: 40px;
+  right: 40px;
+  bottom: 50px;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  row-gap: 14px;
+  z-index: 1;
+}
+
+.folio-mast-actions {
+  display: flex;
+  gap: 10px;
+  align-self: end;
+}
+
+.folio-main {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  column-gap: 32px;
+  overflow: hidden;
+  height: 100%;
+}
+
+.folio-toc {
+  border-right: 1px solid var(--rule);
+  padding-right: 24px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.folio-toc-lab {
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 600;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ink);
+  margin-bottom: 6px;
+}
+.folio-toc-row {
+  display: grid;
+  grid-template-columns: 24px 1fr 16px;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--rule);
+  cursor: pointer;
+  font-size: 13px;
+}
+.folio-toc-row:hover {
+  background: rgba(31, 28, 24, 0.025);
+}
+.folio-toc-row.cur {
+  background: rgba(184, 92, 44, 0.06);
+}
+.folio-toc-row.cur .n,
+.folio-toc-row.cur .t {
+  color: var(--copper);
+}
+.folio-toc-row .n {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-style: italic;
+  color: var(--ink-mute);
+  text-align: center;
+}
+.folio-toc-row .t {
+  font-family: "Atlas Serif", Georgia, serif;
+  color: var(--ink);
+}
+.folio-toc-row .pg {
+  color: var(--ink-mute);
+  font-size: 10px;
+  text-align: right;
+}
+
+.folio-pages {
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.ch-page {
+  margin-bottom: 28px;
+}
+.ch-mast {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ink);
+  margin-bottom: 14px;
+}
+.ch-num {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-style: italic;
+  color: var(--copper);
+  font-size: 22px;
+}
+.ch-title {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  flex: 1;
+}
+.ch-desc {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 13px;
+}
+
+.opt {
+  display: grid;
+  grid-template-columns: 1fr 230px;
+  column-gap: 24px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.opt .info .name {
+  font-family: "Atlas Serif", Georgia, serif;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+.opt .info .desc {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-mute);
+}
+.opt .ctl {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* segmented selector for tunnel mode / DNS mode / TUN stack / permission */
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--ink);
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-wrap: wrap;
+}
+.seg button {
+  padding: 5px 10px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  color: var(--ink-mute);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.seg button:last-child {
+  border-right: 0;
+}
+.seg button.on,
+.seg button.copper.on {
+  background: var(--copper);
+  color: var(--paper);
+}
+.seg button:disabled {
+  cursor: not-allowed;
+}
+.seg.muted {
+  opacity: 0.4;
+}
+
+/* on/off switch */
+
+.swc {
+  display: inline-flex;
+  border: 1px solid var(--ink);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.swc button {
+  padding: 5px 12px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  color: var(--ink-mute);
+  font: inherit;
+  letter-spacing: inherit;
+}
+.swc button:first-child {
+  border-right: 1px solid var(--rule);
+}
+.swc button.on {
+  background: var(--leaf);
+  color: var(--paper);
+}
+.swc button.off {
+  background: var(--ink);
+  color: var(--paper);
+}
+.swc button:disabled {
+  cursor: not-allowed;
+}
+.swc.muted {
+  opacity: 0.4;
+}
+
+.text-input {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  color: var(--ink);
+  padding: 4px 0;
+  width: 100%;
+  outline: none;
+}
+.text-input:focus {
+  border-bottom-color: var(--copper);
+}
+.text-input:disabled {
+  opacity: 0.4;
+  border-bottom-style: dashed;
+}

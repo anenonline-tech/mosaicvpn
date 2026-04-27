@@ -5,6 +5,7 @@ import { Main } from "./screens/Main";
 import { Placeholder } from "./screens/Placeholder";
 import { Pool } from "./screens/Pool";
 import { Routing } from "./screens/Routing";
+import { Folio } from "./screens/Folio";
 
 type Screen = "main" | "routing" | "pool" | "folio" | "tray";
 
@@ -64,12 +65,7 @@ export function App(): JSX.Element {
       {screen === "main" ? <Main status={status} /> : null}
       {screen === "pool" ? <Pool activeServerId={status.server?.id} /> : null}
       {screen === "routing" ? <Routing /> : null}
-      {screen === "folio" ? (
-        <Placeholder
-          title="Folio of preferences"
-          subtitle="Phase 3D · DNS · tunnel mode · kill-switch · MCP"
-        />
-      ) : null}
+      {screen === "folio" ? <Folio /> : null}
       {screen === "tray" ? (
         <Placeholder
           title="Tray composer"
