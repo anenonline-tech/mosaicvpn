@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -106,6 +107,61 @@ func TestPersistRoundTrip(t *testing.T) {
 	}
 	if len(snap.Servers) != 1 {
 		t.Fatalf("expected 1 server, got %d", len(snap.Servers))
+	}
+}
+
+// TestOpen_BackfillsTunStack guards against the regression Devin Review
+// caught: an on-disk config written before the TunStack field existed
+// must not deserialise into TunStack="" because that would silently
+// change config-builder behaviour at runtime.
+func TestOpen_BackfillsTunStack(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.json")
+
+	// A legacy on-disk shape: every field except TunStack populated, the
+	// way Phase 1 wrote it.
+	legacy := []byte(`{
+		"prefs": {
+			"tunnel_mode": "tun",
+			"socks_addr": "127.0.0.1:1080",
+			"http_addr":  "127.0.0.1:1081",
+			"mtu": 1420,
+			"kill_switch": true,
+			"allow_lan": true,
+			"dns_mode": "fake-ip",
+			"dns_proxied": "https://1.1.1.1/dns-query",
+			"dns_direct":  "udp://77.88.8.8",
+			"share_addr":  "0.0.0.0:1080",
+			"auto_start":  "service",
+			"auto_connect": true,
+			"show_on_launch": true,
+			"mcp_enabled": true,
+			"mcp_addr":    "127.0.0.1:8731",
+			"mcp_permission": "connect",
+			"mcp_confirm": true
+		},
+		"version": 1
+	}`)
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatalf("seed legacy store: %v", err)
+	}
+
+	s, err := store.Open(path)
+	if err != nil {
+		t.Fatalf("open legacy store: %v", err)
+	}
+	got := s.Snapshot().Prefs
+	if got.TunStack == "" {
+		t.Fatalf("TunStack was left empty after Open; expected backfill to %q",
+			store.DefaultPrefs().TunStack)
+	}
+	if got.TunStack != store.DefaultPrefs().TunStack {
+		t.Fatalf("TunStack = %q, want %q", got.TunStack, store.DefaultPrefs().TunStack)
+	}
+	// Sanity: the rest of the legacy prefs were preserved (i.e. Open
+	// didn't reset *everything* to defaults via the SocksAddr=="" path).
+	if got.SocksAddr != "127.0.0.1:1080" {
+		t.Fatalf("legacy SocksAddr clobbered: %q", got.SocksAddr)
 	}
 }
 

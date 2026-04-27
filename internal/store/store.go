@@ -123,9 +123,20 @@ func Open(path string) (*Store, error) {
 	if err := json.Unmarshal(data, &s.state); err != nil {
 		return nil, fmt.Errorf("decode store: %w", err)
 	}
-	// Backfill defaults for new fields.
+	// Backfill defaults for new fields. The whole-Prefs reset only kicks
+	// in for very old/corrupted stores (SocksAddr is set in DefaultPrefs
+	// and was always set on writes). Per-field migrations live below.
 	if s.state.Prefs.SocksAddr == "" {
 		s.state.Prefs = DefaultPrefs()
+	}
+	// TunStack was added after the Prefs struct shipped; an existing
+	// config will deserialise it as "". Map "" to the current safe
+	// default ("gvisor") explicitly so the runtime never has to guess.
+	// This is the documented migration: gvisor is now the cross-platform
+	// default; users who want strict-route system stack must opt in via
+	// `mosaic prefs set --tun-stack system`.
+	if s.state.Prefs.TunStack == "" {
+		s.state.Prefs.TunStack = DefaultPrefs().TunStack
 	}
 	return s, nil
 }
