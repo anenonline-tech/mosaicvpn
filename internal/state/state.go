@@ -35,27 +35,36 @@ type Backend interface {
 	Stats() (bytesIn, bytesOut uint64, latencyMS int)
 }
 
+// StatsHeartbeat is how often the manager rebroadcasts Status while
+// connected so subscribers can observe live byte/latency counters
+// without polling. The backend itself updates its counters at a
+// finer cadence; this is just the SSE heartbeat.
+const StatsHeartbeat = 1 * time.Second
+
 // Manager owns the connection state and is safe for concurrent use.
 type Manager struct {
-	mu       sync.Mutex
-	st       proto.Status
-	store    *store.Store
-	backend  Backend
-	cancel   context.CancelFunc
-	subs     []chan proto.Status
-	version  string
-	pid      int
-	started  time.Time
+	mu      sync.Mutex
+	st      proto.Status
+	store   *store.Store
+	backend Backend
+	cancel  context.CancelFunc
+	subs    []chan proto.Status
+	version string
+	pid     int
+	started time.Time
+
+	heartbeat time.Duration
 }
 
 // New constructs a Manager around an existing store and backend.
 func New(s *store.Store, backend Backend, version string) *Manager {
 	m := &Manager{
-		store:   s,
-		backend: backend,
-		version: version,
-		pid:     osPID(),
-		started: time.Now().UTC(),
+		store:     s,
+		backend:   backend,
+		version:   version,
+		pid:       osPID(),
+		started:   time.Now().UTC(),
+		heartbeat: StatsHeartbeat,
 	}
 	prefs := s.Snapshot().Prefs
 	m.st = proto.Status{
@@ -66,6 +75,14 @@ func New(s *store.Store, backend Backend, version string) *Manager {
 		DaemonPID:     m.pid,
 	}
 	return m
+}
+
+// SetHeartbeat overrides the cadence at which Status is rebroadcast
+// while connected. Used by tests; production code keeps the default.
+func (m *Manager) SetHeartbeat(d time.Duration) {
+	m.mu.Lock()
+	m.heartbeat = d
+	m.mu.Unlock()
 }
 
 // Status returns a snapshot of the current state, with live counters from
@@ -166,10 +183,49 @@ func (m *Manager) Connect(ctx context.Context, serverID string) error {
 	})
 	m.mu.Unlock()
 
+	go m.statsHeartbeat(cctx)
+
 	if err := m.store.SetLastServer(serverID); err != nil {
 		logx.Warn("could not persist last server", "err", err)
 	}
 	return nil
+}
+
+// statsHeartbeat rebroadcasts Status (with fresh backend counters folded
+// in) while the connection is up. It exits when ctx is cancelled — i.e.
+// on Disconnect, since Connect uses the same cancel.
+func (m *Manager) statsHeartbeat(ctx context.Context) {
+	if m.heartbeat <= 0 {
+		return
+	}
+	t := time.NewTicker(m.heartbeat)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			m.mu.Lock()
+			if m.st.State != proto.StateConnected {
+				m.mu.Unlock()
+				return
+			}
+			st := m.st
+			if m.backend != nil {
+				in, out, lat := m.backend.Stats()
+				st.BytesIn = in
+				st.BytesOut = out
+				st.LatencyMS = lat
+			}
+			for _, ch := range m.subs {
+				select {
+				case ch <- st:
+				default:
+				}
+			}
+			m.mu.Unlock()
+		}
+	}
 }
 
 // Disconnect stops the backend and returns to disconnected state.
