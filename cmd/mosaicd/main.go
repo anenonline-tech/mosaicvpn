@@ -2,10 +2,11 @@
 // loads on-disk state, exposes an HTTP API on the loopback interface, and
 // drives the VPN backend.
 //
-// In Phase 1 the backend is a deterministic mock that simulates connect /
-// disconnect transitions and ramps up byte counters; the wiring (single-
-// instance, store, state machine, API) is otherwise production-shaped and
-// will be reused unchanged when the real sing-box backend lands in Phase 2.
+// The default backend is sing-box (real VPN engine). The `-mock` flag
+// switches to a deterministic mock backend that simulates connect /
+// disconnect transitions without touching the network — useful for
+// development, integration tests, and CI environments where sing-box
+// can't open a tun device or bind to privileged ports.
 package main
 
 import (
@@ -24,6 +25,7 @@ import (
 	"github.com/pupspochta-cpu/mosaicvpn/internal/logx"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/paths"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/proto"
+	"github.com/pupspochta-cpu/mosaicvpn/internal/sbox"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/single"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/state"
 	"github.com/pupspochta-cpu/mosaicvpn/internal/store"
@@ -36,6 +38,7 @@ func main() {
 	var (
 		dataDir = flag.String("data-dir", "", "override Mosaic data directory")
 		verbose = flag.Bool("v", false, "verbose logging")
+		mock    = flag.Bool("mock", false, "use the deterministic mock backend instead of sing-box")
 	)
 	flag.Parse()
 
@@ -43,13 +46,13 @@ func main() {
 		logx.SetLevel(logx.LevelDebug)
 	}
 
-	if err := run(*dataDir); err != nil {
+	if err := run(*dataDir, *mock); err != nil {
 		fmt.Fprintf(os.Stderr, "mosaicd: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(dataDirOverride string) error {
+func run(dataDirOverride string, useMock bool) error {
 	dataDir := dataDirOverride
 	if dataDir == "" {
 		dataDir = paths.DataDir()
@@ -63,8 +66,13 @@ func run(dataDirOverride string) error {
 		return fmt.Errorf("open store: %w", err)
 	}
 
-	mb := state.NewMockBackend()
-	mgr := state.New(store, mb, Version)
+	var backend state.Backend
+	if useMock {
+		backend = state.NewMockBackend()
+	} else {
+		backend = sbox.New()
+	}
+	mgr := state.New(store, backend, Version)
 
 	apiSrv := api.NewServer(store, mgr, nil)
 
@@ -102,6 +110,7 @@ func run(dataDirOverride string) error {
 		"version", Version,
 		"data_dir", dataDir,
 		"api", fmt.Sprintf("http://%s:%d", host, port),
+		"backend", backend.Name(),
 	)
 
 	// Wait for SIGINT/SIGTERM.

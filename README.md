@@ -3,12 +3,13 @@
 
 A multi-protocol VPN client for Windows that an AI agent can drive end-to-end.
 
-> **Status — Phase 1 of 4.** This repository currently contains the daemon
-> + CLI scaffold with a *mocked* tunnel. The full sing-box / AmneziaWG
-> integration, the Tauri GUI, and the Windows installer land in subsequent
-> phases. The HTTP API surface, single-instance behaviour, store layout,
-> rule engine, subscription parsers, and CLI shape are already production-
-> quality and won't change shape when Phase 2 plugs in the real backend.
+> **Status — Phase 2 of 4 (in progress).** Phase 1 (daemon + CLI + store +
+> parsers + rule engine) is on `main`. This branch wires in **sing-box** as
+> the real VPN backend (VLESS, Hysteria2, Shadowsocks, NaiveProxy). TUN
+> auto-route, AmneziaWG outbound, kill-switch, and the MCP server are the
+> remaining items inside Phase 2; they'll land as follow-up commits once
+> the engine plumbing here is reviewed. Pass `-mock` to `mosaicd` to keep
+> using the deterministic mock backend (useful in tests / non-admin envs).
 
 ## What's in the box
 
